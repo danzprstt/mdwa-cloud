@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { getUserFromReq } from '../../lib/auth';
 import { supabaseAdmin } from '../../lib/supabase';
-import { uploadToCatbox, uploadToUguu } from '../../lib/upload';
+import { uploadToCatbox, uploadToPixeldrain } from '../../lib/upload';
 
 export const config = { api: { bodyParser: false } };
 
@@ -21,21 +21,16 @@ function getFileType(ext) {
   if (['.mp3','.wav','.flac','.ogg','.aac','.m4a'].includes(e)) return 'audio';
   if (e === '.pdf') return 'pdf';
   if (['.zip','.rar','.tar','.gz','.7z'].includes(e)) return 'archive';
-  if (['.doc','.docx','.txt','.md'].includes(e)) return 'doc';
-  if (['.xls','.xlsx','.csv'].includes(e)) return 'sheet';
   return 'file';
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
-
   const user = getUserFromReq(req);
   if (!user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
 
-  // Parse multipart
   const form = formidable({ maxFileSize: 200 * 1024 * 1024 });
   const [fields, files] = await form.parse(req);
-
   const uploadedFile = files.file?.[0];
   if (!uploadedFile) return res.json({ ok: false, error: 'Tidak ada file' });
 
@@ -46,83 +41,42 @@ export default async function handler(req, res) {
   const fileType = getFileType(ext);
   const size = uploadedFile.size;
   const title = titleInput || originalName.replace(/\.[^.]+$/, '');
-
-  // Read file buffer
   const buffer = fs.readFileSync(uploadedFile.filepath);
 
   const db = supabaseAdmin();
-  let supabaseUrl = null, catboxUrl = null, uguuUrl = null;
-  let catboxError = null, uguuError = null, supabaseError = null;
+  let supabaseUrl = null, catboxUrl = null, pixeldrainUrl = null;
+  let catboxError = null, pixeldrainError = null, supabaseError = null;
 
-  // 1. Upload to Supabase Storage
+  // 1. Supabase Storage
   try {
     const storagePath = `${user.userId}/${Date.now()}_${originalName}`;
-    const { data, error } = await db.storage
-      .from('mdwa-files')
-      .upload(storagePath, buffer, {
-        contentType: 'application/octet-stream',
-        upsert: false,
-      });
-
+    const { error } = await db.storage.from('mdwa-files').upload(storagePath, buffer, { contentType: 'application/octet-stream', upsert: false });
     if (error) throw new Error(error.message);
-
-    const { data: urlData } = db.storage
-      .from('mdwa-files')
-      .getPublicUrl(storagePath);
-
+    const { data: urlData } = db.storage.from('mdwa-files').getPublicUrl(storagePath);
     supabaseUrl = urlData.publicUrl;
-  } catch (e) {
-    supabaseError = e.message;
-    console.error('Supabase storage error:', e.message);
-  }
+  } catch(e) { supabaseError = e.message; }
 
-  // 2. Upload to Catbox (parallel with Uguu)
-  const [catboxResult, uguuResult] = await Promise.allSettled([
+  // 2. Catbox + Pixeldrain parallel
+  const [catboxResult, pixeldrainResult] = await Promise.allSettled([
     uploadToCatbox(buffer, originalName),
-    uploadToUguu(buffer, originalName),
+    uploadToPixeldrain(buffer, originalName),
   ]);
-
   if (catboxResult.status === 'fulfilled') catboxUrl = catboxResult.value;
   else catboxError = catboxResult.reason?.message;
+  if (pixeldrainResult.status === 'fulfilled') pixeldrainUrl = pixeldrainResult.value;
+  else pixeldrainError = pixeldrainResult.reason?.message;
 
-  if (uguuResult.status === 'fulfilled') uguuUrl = uguuResult.value;
-  else uguuError = uguuResult.reason?.message;
-
-  // 3. Determine thumb_url (for images, use supabase/catbox URL directly)
   let thumbUrl = null;
-  if (fileType === 'image') {
-    thumbUrl = catboxUrl || supabaseUrl;
-  }
-  // video/audio: client will generate canvas thumbnail and send separately
+  if (fileType === 'image') thumbUrl = catboxUrl || supabaseUrl;
 
-  // 4. Save to DB
   const { data: record, error: dbError } = await db.from('files').insert({
-    user_id: user.userId,
-    title,
-    original_name: originalName,
-    ext,
-    size,
-    size_formatted: formatSize(size),
-    file_type: fileType,
-    folder,
-    catbox_url: catboxUrl,
-    uguu_url: uguuUrl,
-    supabase_url: supabaseUrl,
-    thumb_url: thumbUrl,
+    user_id: user.userId, title, original_name: originalName, ext, size,
+    size_formatted: formatSize(size), file_type: fileType, folder,
+    catbox_url: catboxUrl, pixeldrain_url: pixeldrainUrl, supabase_url: supabaseUrl, thumb_url: thumbUrl,
   }).select().single();
 
-  if (dbError) {
-    console.error('DB error:', dbError.message);
-    return res.json({ ok: false, error: 'Database error: ' + dbError.message });
-  }
+  try { fs.unlinkSync(uploadedFile.filepath); } catch(_) {}
+  if (dbError) return res.json({ ok: false, error: 'DB error: ' + dbError.message });
 
-  // Cleanup temp file
-  try { fs.unlinkSync(uploadedFile.filepath); } catch (_) {}
-
-  return res.json({
-    ok: true,
-    file: record,
-    catboxUrl, uguuUrl, supabaseUrl,
-    catboxError, uguuError, supabaseError,
-  });
+  return res.json({ ok: true, file: record, catboxUrl, pixeldrainUrl, supabaseUrl, catboxError, pixeldrainError, supabaseError });
 }

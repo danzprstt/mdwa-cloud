@@ -2,16 +2,11 @@
 const nextConfig = {
   reactStrictMode: true,
   images: {
-    domains: ['files.catbox.moe', 'uguu.se', 'a.uguu.se', 'your-project.supabase.co'],
     remotePatterns: [
       { protocol: 'https', hostname: '**.supabase.co' },
       { protocol: 'https', hostname: 'files.catbox.moe' },
-      { protocol: 'https', hostname: '**.uguu.se' },
+      { protocol: 'https', hostname: 'pixeldrain.com' },
     ],
   },
-  api: {
-    bodyParser: false,
-  },
 };
-
 module.exports = nextConfig;
