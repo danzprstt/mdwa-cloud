@@ -253,19 +253,28 @@ function DownloaderTool({ platform, showToast }) {
           {result.thumb && <img src={result.thumb} alt="" style={{ width:'100%', borderRadius:12, marginBottom:12, maxHeight:200, objectFit:'cover' }} />}
           {result.title && <div style={{ fontSize:'0.85rem', fontWeight:700, marginBottom:12, color:'var(--text)' }}>{result.title}</div>}
 
-          {result.type === 'result' && result.items?.map((item, i) => (
-            <a key={i} href={item.url} target="_blank" rel="noopener noreferrer" style={{
-              display:'flex', alignItems:'center', gap:10, marginBottom:8,
-              background: item.type==='audio' ? 'rgba(16,185,129,0.08)' : 'rgba(79,110,247,0.08)',
-              border: `1px solid ${item.type==='audio' ? 'rgba(16,185,129,0.2)' : 'rgba(79,110,247,0.2)'}`,
-              borderRadius:12, padding:'12px 14px', textDecoration:'none',
-              color: item.type==='audio' ? 'var(--green)' : 'var(--blue)',
-              fontSize:'0.82rem', fontWeight:700,
-            }}>
-              {item.type === 'audio' ? '🎵' : '🎬'} {item.label}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft:'auto', flexShrink:0 }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </a>
-          ))}
+          {result.type === 'result' && result.items?.map((item, i) => {
+            const isExt = item.type === 'external';
+            const isAudio = item.type === 'audio';
+            const bg = isExt ? 'rgba(139,92,246,0.08)' : isAudio ? 'rgba(16,185,129,0.08)' : 'rgba(79,110,247,0.08)';
+            const border = isExt ? 'rgba(139,92,246,0.25)' : isAudio ? 'rgba(16,185,129,0.2)' : 'rgba(79,110,247,0.2)';
+            const color = isExt ? 'var(--purple,#8b5cf6)' : isAudio ? 'var(--green)' : 'var(--blue)';
+            const icon = isExt ? '🌐' : isAudio ? '🎵' : '🎬';
+            const dlIcon = isExt
+              ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
+            return (
+              <a key={i} href={item.url} target="_blank" rel="noopener noreferrer" style={{
+                display:'flex', alignItems:'center', gap:10, marginBottom:8,
+                background: bg, border:`1px solid ${border}`,
+                borderRadius:12, padding:'12px 14px', textDecoration:'none',
+                color, fontSize:'0.82rem', fontWeight:700,
+              }}>
+                {icon} {item.label}
+                <span style={{ marginLeft:'auto', flexShrink:0 }}>{dlIcon}</span>
+              </a>
+            );
+          })}
 
           {result.type === 'manual' && (
             <div>
